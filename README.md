@@ -20,7 +20,7 @@ Para compilar com o GCC e utilizar o PGO (Profile-Guided Optimization), basta ex
 
 O programa pode ser executado com os seguintes argumentos:
 
-- `--size=N`: define o tamanho do vetor a ser somado. O padrão é `1000`.
+- `--size=N`: define o tamanho do vetor a ser somado. O padrão é `100000`.
 - `--threads=T`: define o número de threads a ser utilizado. O padrão é o número de CPUs disponíveis.
 - `--no-serial`: desabilita a execução serial. O padrão é ativado.
 
