@@ -10,7 +10,7 @@ $$
 
 ## Compilação
 
-Para compilar, basta executar `make` no terminal. O programa será compilado com o GCC, utilizando as opções `-fopenmp`, `-O0`, `-g`, `-Wall`, `-Wextra`, `-Werror`, `-fno-omit-frame-pointer` e `-fsanitize=address`.
+Para compilar, basta executar `make` no terminal. O programa será compilado com o GCC, utilizando as opções `-fopenmp`, `-O0`, `-g`, `-Wall`, `-Wextra`, `-fno-omit-frame-pointer` e `-fsanitize=address`.
 
 Para compilar com o Clang, basta executar `make clang` no terminal. O programa será compilado com o Clang, utilizando as opções `-O3`, `-march=native`, `-flto`, `-fopenmp`.
 
