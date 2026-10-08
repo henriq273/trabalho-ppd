@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -20,6 +21,18 @@ double harmonic_sum_serial(int n) {
     }
     return sum;
 }
+
+/*
+    Argumentos:
+        --size=N: define o tamanho do vetor a ser somado
+        Uso: ./harmonic-sum --size=1000
+
+        --threads=T: define o número de threads a ser utilizado
+        Uso: ./harmonic-sum --threads=4
+
+        --no-serial: desabilita a execução serial
+        Uso: ./harmonic-sum --no-serial
+*/
 
 int main(int argc, char *argv[]) {
 
