@@ -4,9 +4,14 @@
 #include <math.h>
 #include <time.h>
 #include <sys/time.h>
-// #include <omp.h>
+#include <string.h>
+#include <errno.h>
+#include <unistd.h>
+#include <omp.h>
 
-int N = 1000;
+long long int N = 1000;
+int num_threads = 1;
+int run_serial = 1;
 
 double get_time() {
     struct timeval tv;
@@ -14,9 +19,9 @@ double get_time() {
     return (double) tv.tv_sec + (double) tv.tv_usec * 1e-6;
 }
 
-double harmonic_sum_serial(int n) {
+double harmonic_sum_serial(long long int n) {
     double sum = 0;
-    for (int i = 1; i <= n; i++) {
+    for (long long int i = 1; i <= n; i++) {
         sum += 1.0 / i;
     }
     return sum;
@@ -34,14 +39,62 @@ double harmonic_sum_serial(int n) {
         Uso: ./harmonic-sum --no-serial
 */
 
+static void usage(const char *prog) {
+    fprintf(stderr, "Uso: %s [--size=N] [--threads=T] [--no-serial]\n", prog);
+}
+
+// Converte str em inteiro positivo; retorna 0 em caso de erro.
+static int parse_positive(const char *str, long long *out) {
+    char *end;
+    errno = 0;
+    long long v = strtoll(str, &end, 10);
+    if (errno != 0 || end == str || *end != '\0' || v <= 0) return 0;
+    *out = v;
+    return 1;
+}
+
 int main(int argc, char *argv[]) {
+    // Padrao: quantidade de CPUs disponiveis (sobrescrito por --threads)
+    long ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+    num_threads = ncpus > 0 ? (int) ncpus : 1;
 
-    double start = get_time();
-    double result = harmonic_sum_serial(N);
-    double end = get_time();
+    // Os argumentos podem aparecer em qualquer ordem
+    for (int i = 1; i < argc; i++) {
+        long long v;
+        if (strncmp(argv[i], "--size=", 7) == 0) {
+            if (!parse_positive(argv[i] + 7, &v)) {
+                fprintf(stderr, "Valor invalido para --size: '%s'\n", argv[i] + 7);
+                return 1;
+            }
+            N = v;
+        } else if (strncmp(argv[i], "--threads=", 10) == 0) {
+            if (!parse_positive(argv[i] + 10, &v) || v > 65536) {
+                fprintf(stderr, "Valor invalido para --threads: '%s'\n", argv[i] + 10);
+                return 1;
+            }
+            num_threads = (int) v;
+        } else if (strcmp(argv[i], "--no-serial") == 0) {
+            run_serial = 0;
+        } else {
+            fprintf(stderr, "Argumento desconhecido: '%s'\n", argv[i]);
+            usage(argv[0]);
+            return 1;
+        }
+    }
 
-    printf("Soma de %d números de Harmonica: %f\n", N, result);
-    printf("Tempo serializado: %f\n", end - start);
+    printf("Tamanho: %lld | Threads: %d | Serial: %s\n", N, num_threads, run_serial ? "sim" : "nao");
+
+    if (run_serial) {
+        double start = get_time();
+        double result = harmonic_sum_serial(N);
+        double end = get_time();
+
+        printf("Soma de %lld números de Harmonica: %f\n", N, result);
+        printf("Tempo serializado: %f\n", end - start);
+    }
+
+    // TODO: versao paralela
+    // #pragma omp parallel num_threads(num_threads)
 
     return 0;
 }
