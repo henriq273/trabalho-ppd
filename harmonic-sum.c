@@ -9,7 +9,7 @@
 #include <unistd.h>
 #include <omp.h>
 
-long long int N = 1000;
+long long int N = 100000;
 int num_threads = 1;
 int run_serial = 1;
 
@@ -86,15 +86,15 @@ int main(int argc, char *argv[]) {
 
     if (run_serial) {
         double start = get_time();
-        double result = harmonic_sum_serial(N);
+        long double result = harmonic_sum_serial(N);
         double end = get_time();
 
-        printf("Soma de %lld números de Harmonica: %f\n", N, result);
+        printf("Soma de %lld números de Harmonica: %.20Lf\n", N, result);
         printf("Tempo serializado: %f\n\n", end - start);
         fflush(stdout);
     }
 
-    double sum = 0.0;
+    long double sum = 0.0;
     double start = get_time();
     #pragma omp parallel num_threads(num_threads) shared(sum)
     {
@@ -117,7 +117,7 @@ int main(int argc, char *argv[]) {
     }
     double end = get_time();
 
-    printf("Soma de %lld números de Harmonica: %f\n", N, sum);
+    printf("Soma de %lld números de Harmonica: %.20Lf\n", N, sum);
     printf("Tempo total: %f\n", end - start);
 
     return 0;
