@@ -20,11 +20,11 @@ double get_time() {
 }
 
 double harmonic_sum_serial(long long int n) {
-    double sum = 0;
+    double serial_sum = 0.0;
     for (long long int i = 1; i <= n; i++) {
-        sum += 1.0 / i;
+        serial_sum += 1.0 / i;
     }
-    return sum;
+    return serial_sum;
 }
 
 /*
@@ -82,7 +82,7 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    printf("Tamanho: %lld | Threads: %d | Serial: %s\n", N, num_threads, run_serial ? "sim" : "nao");
+    printf("Tamanho: %lld | Threads: %d | Serial: %s\n\n", N, num_threads, run_serial ? "sim" : "nao");
 
     if (run_serial) {
         double start = get_time();
@@ -90,11 +90,35 @@ int main(int argc, char *argv[]) {
         double end = get_time();
 
         printf("Soma de %lld números de Harmonica: %f\n", N, result);
-        printf("Tempo serializado: %f\n", end - start);
+        printf("Tempo serializado: %f\n\n", end - start);
+        fflush(stdout);
     }
 
-    // TODO: versao paralela
-    // #pragma omp parallel num_threads(num_threads)
+    double sum = 0.0;
+    double start = get_time();
+    #pragma omp parallel num_threads(num_threads) shared(sum)
+    {
+        // double start = get_time();
+
+        #pragma omp for reduction(+:sum) schedule(guided)
+        for (long long int i = 1; i <= N; i++) {
+            sum += 1.0 / i;
+        }
+
+        // double end = get_time();
+
+        /*
+        #pragma omp critical
+        {
+            printf("Thread %d: Soma de %lld números de Harmonica: %f\n", omp_get_thread_num(), N, sum);
+            printf("Thread %d: Tempo paralelo: %f\n", omp_get_thread_num(), end - start);
+        }
+        */
+    }
+    double end = get_time();
+
+    printf("Soma de %lld números de Harmonica: %f\n", N, sum);
+    printf("Tempo total: %f\n", end - start);
 
     return 0;
 }
