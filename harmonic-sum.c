@@ -19,15 +19,22 @@
 #  endif
 #endif
 
-long long int N = 100000;
+long unsigned int N = 100000; // n: número de termos
 int num_threads = 1;
 int run_serial = 1;
-long long int precision = 20; // casas decimais (d)
+long unsigned int precision = 20; // d: casas decimais
 
-double harmonic_sum_serial(long long int n) {
-    double serial_sum = 0.0;
-    for (long long int i = 1; i <= n; i++) {
-        serial_sum += 1.0 / i;
+/*
+ * Referência serial em long double. n (long unsigned int) é convertido para
+ * long double, e o contador do laço também é long double (a mantissa de 64 bits
+ * do x86 representa inteiros até 2^64 sem perda). Só aqui os valores viram
+ * ponto flutuante; no restante do programa n e d são long unsigned int.
+ */
+static long double harmonic_sum_serial(const long unsigned int n) {
+    const long double ld_n = (long double) n;
+    long double serial_sum = 0.0L;
+    for (long double i = 1.0L; i <= ld_n; i += 1.0L) {
+        serial_sum += 1.0L / i;
     }
     return serial_sum;
 }
@@ -213,11 +220,13 @@ static void usage(const char *prog) {
 }
 
 // Converte str em inteiro positivo; retorna 0 em caso de erro.
-static int parse_positive(const char *str, long long *out) {
+// Exige começar por dígito (strtoul aceitaria "-5" e espaços, com wraparound).
+static int parse_positive(const char *str, long unsigned int *out) {
     char *end;
+    if (*str < '0' || *str > '9') return 0;
     errno = 0;
-    long long v = strtoll(str, &end, 10);
-    if (errno != 0 || end == str || *end != '\0' || v <= 0) return 0;
+    long unsigned int v = strtoul(str, &end, 10);
+    if (errno != 0 || end == str || *end != '\0' || v == 0) return 0;
     *out = v;
     return 1;
 }
@@ -241,7 +250,7 @@ static int run(int argc, char *argv[], int rank, int size) {
 
     // Os argumentos podem aparecer em qualquer ordem
     for (int i = 1; i < argc; i++) {
-        long long v;
+        long unsigned int v;
         if (strncmp(argv[i], "--size=", 7) == 0) {
             if (!parse_positive(argv[i] + 7, &v)) {
                 if (rank == 0) fprintf(stderr, "Valor invalido para --size: '%s'\n", argv[i] + 7);
@@ -285,7 +294,7 @@ static int run(int argc, char *argv[], int rank, int size) {
     }
 
     if (rank == 0) {
-        printf("Tamanho: %lld | Processos: %d | Threads: %d | Precisao: %lld | Serial: %s\n\n",
+        printf("Tamanho: %lu | Processos: %d | Threads: %d | Precisao: %lu | Serial: %s\n\n",
                N, size, num_threads, precision, run_serial ? "sim" : "nao");
     }
 
@@ -294,7 +303,7 @@ static int run(int argc, char *argv[], int rank, int size) {
         long double result = harmonic_sum_serial(N);
         double end = MPI_Wtime();
 
-        printf("Soma de %lld números de Harmonica: %.*Lf\n", N, (int) precision, result);
+        printf("Soma de %lu números de Harmonica: %.*Lf\n", N, (int) precision, result);
         printf("Tempo serializado: %f\n\n", end - start);
         fflush(stdout);
     }
@@ -302,11 +311,11 @@ static int run(int argc, char *argv[], int rank, int size) {
     // Soma em long double (MPI + OpenMP)
     MPI_Barrier(MPI_COMM_WORLD); // todos começam juntos
     double start = MPI_Wtime();
-    long double ld_sum = harmonic_sum_parallel((long unsigned int) N);
+    long double ld_sum = harmonic_sum_parallel(N);
     double ld_time = max_time(MPI_Wtime() - start);
 
     if (rank == 0) {
-        printf("Soma de %lld números de Harmonica (long double): %.*Lf\n", N, (int) precision, ld_sum);
+        printf("Soma de %lu números de Harmonica (long double): %.*Lf\n", N, (int) precision, ld_sum);
         printf("Tempo total (long double): %f\n\n", ld_time);
         fflush(stdout);
     }
@@ -318,7 +327,7 @@ static int run(int argc, char *argv[], int rank, int size) {
 
     MPI_Barrier(MPI_COMM_WORLD);
     start = MPI_Wtime();
-    int rc = sum(precise, cap, (long unsigned int) precision, (long unsigned int) N);
+    int rc = sum(precise, cap, precision, N);
     double precise_time = max_time(MPI_Wtime() - start);
 
     if (rc != 0) {
@@ -328,7 +337,7 @@ static int run(int argc, char *argv[], int rank, int size) {
     }
 
     if (rank == 0) {
-        printf("Soma de %lld números de Harmonica (precisa): %s\n", N, precise);
+        printf("Soma de %lu números de Harmonica (precisa): %s\n", N, precise);
         printf("Tempo total (precisa): %f\n", precise_time);
     }
 
