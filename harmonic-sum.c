@@ -183,7 +183,7 @@ int sum (char *output, const size_t cap, const long unsigned int d, const long u
     sum_partial(digits, d, i_begin, i_end);
 
     // Soma elemento a elemento dos vetores de todos os ranks no rank 0
-    // MPI usa int para a contagem; d <= 100000 (validado em --precision) cabe
+    // MPI usa int para a contagem; d <= INT_MAX - 11 (validado em --precision) cabe
     const int len = (int) (d + 11);
     if (rank == 0) {
         MPI_Reduce(MPI_IN_PLACE, digits, len, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
@@ -264,7 +264,7 @@ static int run(int argc, char *argv[], int rank, int size) {
             }
             num_threads = (int) v;
         } else if (strncmp(argv[i], "--precision=", 12) == 0) {
-            if (!parse_positive(argv[i] + 12, &v) || v > 100000) {
+            if (!parse_positive(argv[i] + 12, &v) || v > 2147483636UL) { // INT_MAX - 11: d + 11 precisa caber no int do MPI_Reduce
                 if (rank == 0) fprintf(stderr, "Valor invalido para --precision: '%s'\n", argv[i] + 12);
                 return 1;
             }
@@ -303,7 +303,7 @@ static int run(int argc, char *argv[], int rank, int size) {
         long double result = harmonic_sum_serial(N);
         double end = MPI_Wtime();
 
-        printf("Soma de %lu números de Harmonica: %.*Lf\n", N, (int) precision, result);
+        printf("Soma de %lu números de Harmonica: %.100Lf\n", N, result);
         printf("Tempo serializado: %f\n\n", end - start);
         fflush(stdout);
     }
@@ -315,7 +315,7 @@ static int run(int argc, char *argv[], int rank, int size) {
     double ld_time = max_time(MPI_Wtime() - start);
 
     if (rank == 0) {
-        printf("Soma de %lu números de Harmonica (long double): %.*Lf\n", N, (int) precision, ld_sum);
+        printf("Soma de %lu números de Harmonica (long double): %.100Lf\n", N, ld_sum);
         printf("Tempo total (long double): %f\n\n", ld_time);
         fflush(stdout);
     }
@@ -356,7 +356,15 @@ int main(int argc, char *argv[]) {
                         "o uso combinado com OpenMP pode ser inseguro\n", provided);
     }
 
+    double prog_start = 0, prog_end = 0;
+
+    prog_start = MPI_Wtime();
     int rc = run(argc, argv, rank, size);
+    prog_end = MPI_Wtime();
+
+    if (rank == 0) {
+        printf("\nTempo total do programa: %f\n", prog_end - prog_start);
+    }
 
     MPI_Finalize();
     return rc;
