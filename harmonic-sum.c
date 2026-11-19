@@ -84,12 +84,12 @@ int sum (char *output, const size_t cap, const long unsigned int d, const long u
     if (digits == NULL) return -1;
 
     /*
-     * Para d grande (evita estouro de pilha com VLA):
-     * alocar digits no heap com calloc, que já devolve a memória zerada
-     * 
-     * Obs.: as cópias privadas criadas pelo reduction(+:digits[:d + 11]) ficam
-     * na pilha de cada thread, mesmo com digits no heap. Se ainda estourar,
-     * precisa aumentar OMP_STACKSIZE (ex.: export OMP_STACKSIZE=64M).
+        Para d grande (evita estouro de pilha com VLA):
+        alocar digits no heap com calloc, que já devolve a memória zerada
+    
+        Obs.: as cópias privadas criadas pelo reduction(+:digits[:d + 11]) ficam
+        na pilha de cada thread, mesmo com digits no heap. Se ainda estourar,
+        precisa aumentar OMP_STACKSIZE (ex.: export OMP_STACKSIZE=64M).
     */
 
     #pragma omp parallel for num_threads(num_threads) reduction(+:digits[:d + 11]) schedule(guided)
