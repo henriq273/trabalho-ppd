@@ -4,6 +4,7 @@
 #include <time.h>
 #include <string.h>
 #include <errno.h>
+#include <float.h>
 #include <limits.h>
 #include <unistd.h>
 #include <omp.h>
@@ -16,8 +17,9 @@ int num_threads = 1;
 int run_serial = 1;
 long unsigned int precision = 20; // casas decimais (d)
 
-double harmonic_sum_serial(long unsigned int n);
-int sum(char *output, const size_t cap, const long unsigned int d, const long unsigned int n);
+long double harmonic_sum_serial(long unsigned int n);
+int sum(char *output, const size_t cap, const long unsigned int d, const long unsigned int n,
+        double *t_compute, double *t_comm);
 
 // Espaço mínimo do buffer de saída para d casas decimais:
 // até 20 dígitos da parte inteira (unsigned long) + '.' + d casas + '\0' (+ folga)
@@ -72,7 +74,11 @@ static int run(int argc, char *argv[], int rank, int size) {
             long double result = harmonic_sum_serial(N);
             double end = MPI_Wtime();
 
-            printf("Soma de %lu números de Harmonica: %.*Lf\n", N, (int) precision, result);
+            // O long double só tem LDBL_DIG dígitos decimais confiáveis; imprimir
+            // mais que isso só mostra ruído e zeros. Limita às casas que existem.
+            const int serial_digits = precision < (long unsigned int) LDBL_DIG
+                                    ? (int) precision : LDBL_DIG;
+            printf("Soma de %lu números de Harmonica:\n   %.*Lf\n", N, serial_digits, result);
             printf("Tempo serializado: %f\n\n", end - start);
             fflush(stdout);
         }
@@ -87,8 +93,18 @@ static int run(int argc, char *argv[], int rank, int size) {
 
     MPI_Barrier(MPI_COMM_WORLD); // todos começam juntos
     double start = MPI_Wtime();
-    int rc = sum(precise, cap, precision, N);
-    double end = MPI_Wtime();
+    double t_compute, t_comm;
+    int rc = sum(precise, cap, precision, N, &t_compute, &t_comm);
+    double t_total = MPI_Wtime() - start;
+
+    /*
+        O programa só termina quando o rank mais lento termina, então o tempo
+        reportado de cada fase é o máximo entre os ranks. Um único MPI_Reduce(MAX)
+        leva os três valores ao rank 0 (os demais ranks só enviam).
+     */
+    double local[3] = {t_total, t_compute, t_comm};
+    double max[3] = {0.0, 0.0, 0.0};
+    MPI_Reduce(local, max, 3, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
     if (rc != 0) {
         if (rank == 0) fprintf(stderr, "Falha ao calcular a soma de precisão arbitrária\n");
@@ -97,8 +113,10 @@ static int run(int argc, char *argv[], int rank, int size) {
     }
 
     if (rank == 0) {
-        printf("Soma de %lu números de Harmonica (precisa): %s\n", N, precise);
-        printf("Tempo total (precisa): %f\n", end - start);
+        printf("Soma de %lu números de Harmonica (precisa):\n   %s\n", N, precise);
+        printf("Tempo total (precisa): %f\n", max[0]);
+        printf("  computação (máx. entre ranks): %f\n", max[1]);
+        printf("  comunicação (MPI_Reduce):      %f\n", max[2]);
     }
 
     free(precise);
@@ -222,9 +240,18 @@ static void sum_finalize(char *output, const size_t cap,
      - O rank 0 faz carry, arredondamento e formatação em output (capacidade cap).
     Só o rank 0 precisa passar output/cap válidos; nos demais, output = NULL.
 
+    Tempos (deste rank, em segundos), gravados em t_compute e t_comm:
+     - t_compute: o sum_partial (computação do bloco de i);
+     - t_comm: o MPI_Reduce dos vetores de dígitos.
+    Ficam em 0 se a função falhar antes de calcular.
+
     Retorna 0 em sucesso, -1 em falha (o MESMO valor em todos os ranks).
  */
-int sum (char *output, const size_t cap, const long unsigned int d, const long unsigned int n) {
+int sum (char *output, const size_t cap, const long unsigned int d, const long unsigned int n,
+         double *t_compute, double *t_comm) {
+
+    *t_compute = 0.0;
+    *t_comm = 0.0;
 
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -258,7 +285,16 @@ int sum (char *output, const size_t cap, const long unsigned int d, const long u
     long unsigned int i_begin, i_end;
     block_range(n, rank, size, &i_begin, &i_end);
 
+    // Tempo de computação deste rank (só o seu bloco de i)
+    double t0 = MPI_Wtime();
     sum_partial(digits, d, i_begin, i_end);
+    *t_compute = MPI_Wtime() - t0;
+
+    // O barrier nivela os ranks: sem ele, o MPI_Reduce do rank 0 esperaria pelo
+    // rank mais lento e essa espera (desbalanceamento) entraria no tempo de
+    // comunicação. Assim t_comm mede só o Reduce; a espera já está em t_compute
+    // (que sai como o máximo entre os ranks).
+    MPI_Barrier(MPI_COMM_WORLD);
 
     /*
         Soma elemento a elemento dos vetores de todos os ranks, no rank 0:
@@ -276,11 +312,14 @@ int sum (char *output, const size_t cap, const long unsigned int d, const long u
         argumentos seria erro do MPI (buffers sobrepostos).
      */
     const int len = (int) (d + 11);
+    t0 = MPI_Wtime();
     if (rank == 0) {
         MPI_Reduce(MPI_IN_PLACE, digits, len, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        *t_comm = MPI_Wtime() - t0; // antes do carry/formatação, que não é comunicação
         sum_finalize(output, cap, digits, d);
     } else {
         MPI_Reduce(digits, NULL, len, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        *t_comm = MPI_Wtime() - t0;
     }
 
     free(digits);
@@ -289,10 +328,13 @@ int sum (char *output, const size_t cap, const long unsigned int d, const long u
 
 
 
-double harmonic_sum_serial(long unsigned int n) {
-    double serial_sum = 0.0;
+// Referência serial em long double (mantissa de 64 bits no x86, ~19 dígitos
+// corretos), em vez de double (~15-16). Mesmo assim, para --precision acima
+// de ~19 casas, os dígitos extras impressos desta linha não são significativos.
+long double harmonic_sum_serial(long unsigned int n) {
+    long double serial_sum = 0.0L;
     for (long unsigned int i = 1; i <= n; i++) {
-        serial_sum += 1.0 / i;
+        serial_sum += 1.0L / i;
     }
     return serial_sum;
 }
