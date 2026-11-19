@@ -32,9 +32,8 @@
 ##SBATCH --mail-user=SEU_EMAIL@estudante.ufscar.br
 
 # ============================ CONFIGURE AQUI ============================
-FONTE=harmonic-sum.c     # seu codigo-fonte
-ARQUIVO_ARGUMENTOS=entrada.in   # arquivo com os argumentos do programa (uma linha)
-ARGUMENTOS="$(cat "$ARQUIVO_ARGUMENTOS" 2>/dev/null)"  # lidos dele (pode ficar "")
+FONTE=harmonic-sum.c         # seu codigo-fonte
+ARGUMENTOS="1000"        # argumentos de linha de comando (pode ficar "")
 ENTRADA_STDIN=""         # so se o programa le com scanf/stdin (./prog < arquivo):
                          # coloque o nome do arquivo aqui. Se o programa abre o
                          # arquivo sozinho com fopen(), deixe "" - basta o
@@ -53,17 +52,12 @@ if [ -z "$SLURM_JOB_ID" ]; then
   if [ ! -f "$FONTE" ]; then
     echo "ERRO: '$FONTE' nao esta em $PWD"; exit 1
   fi
-  if [ -n "$ARQUIVO_ARGUMENTOS" ] && [ ! -f "$ARQUIVO_ARGUMENTOS" ]; then
-    echo "ERRO: arquivo de argumentos '$ARQUIVO_ARGUMENTOS' nao esta em $PWD"; exit 1
-  fi
   if [ -n "$ENTRADA_STDIN" ] && [ ! -f "$ENTRADA_STDIN" ]; then
     echo "ERRO: entrada '$ENTRADA_STDIN' nao esta em $PWD"; exit 1
   fi
 
   echo "compilando $FONTE ..."
-  # -fopenmp e obrigatorio: sem ele os #pragma omp sao ignorados e cada rank roda com 1 thread.
-  # Sem -march=native: o no de login pode ter CPU diferente dos nos de computacao.
-  mpicc -O3 -fopenmp -o "$BIN" "$FONTE" -lm || { echo "ERRO: compilacao falhou. Nada foi para a fila."; exit 1; }
+  mpicc -O2 -o "$BIN" "$FONTE" -lm || { echo "ERRO: compilacao falhou. Nada foi para a fila."; exit 1; }
   sbatch "$SCRIPT"
   exit $?
 fi
@@ -79,12 +73,6 @@ cd "$SLURM_SUBMIT_DIR" || exit 1
 export OMPI_MCA_btl_tcp_if_include=200.18.104.0/24
 export OMPI_MCA_oob_tcp_if_include=200.18.104.0/24
 
-# Pilha para precisoes grandes (--precision): as copias privadas do reduction
-# (d+11)*8 bytes por thread ficam na pilha. OMP_STACKSIZE vale para as threads
-# trabalhadoras; a thread mestre usa a pilha do processo (ulimit -s, padrao 8 MB).
-export OMP_STACKSIZE=64M
-ulimit -s unlimited 2>/dev/null || ulimit -s "$(ulimit -H -s)"
-
 echo "job=$SLURM_JOB_ID  maquinas=$SLURM_JOB_NODELIST  processos=$SLURM_NTASKS"
 date
 echo
@@ -99,14 +87,6 @@ fi
 echo "=== processos por maquina ==="
 mpirun -n "$SLURM_NTASKS" hostname | sort | uniq -c
 echo
-
-# Threads OpenMP por processo = CPUs reservadas por processo (--cpus-per-task).
-# Sem isso o programa usaria todas as CPUs do no por processo (oversubscription).
-# So acrescenta se o arquivo de argumentos nao definir --threads.
-case "$ARGUMENTOS" in
-  *--threads=*) ;;
-  *) ARGUMENTOS="$ARGUMENTOS --threads=${SLURM_CPUS_PER_TASK:-2}" ;;
-esac
 
 echo "=== execucao: ./$BIN $ARGUMENTOS ==="
 INICIO=$(date +%s.%N)
