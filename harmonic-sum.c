@@ -4,6 +4,7 @@
 #include <time.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 #include <unistd.h>
 #include <omp.h>
 #include <mpi.h>
@@ -78,32 +79,30 @@ static int run(int argc, char *argv[], int rank, int size) {
     }
 
     // Soma de precisão arbitrária (divisão longa dígito a dígito).
-    // só o rank 0 calcula (sum ainda não divide o trabalho entre ranks);
-    // o resultado (rc) é enviado a todos para eles terminarem com o mesmo código.
-    int rc = 0;
-    if (rank == 0) {
-        size_t cap = SUM_OUTPUT_CAP(precision);
-        char *precise = malloc(cap);
-        if (precise == NULL) {
-            fprintf(stderr, "Falha ao alocar %zu bytes para o resultado\n", cap);
-            rc = 1;
-        } else {
-            double start = MPI_Wtime();
-            if (sum(precise, cap, precision, N) != 0) {
-                fprintf(stderr, "Falha ao calcular a soma de precisão arbitrária\n");
-                rc = 1;
-            } else {
-                double end = MPI_Wtime();
-                printf("Soma de %lu números de Harmonica (precisa): %s\n", N, precise);
-                printf("Tempo total (precisa): %f\n", end - start);
-            }
-            free(precise);
-        }
+    // Só o rank 0 recebe o resultado, então só ele aloca o buffer de saída.
+    // Todos chamam sum (coletiva), mesmo se o malloc falhar: sum vê o output
+    // NULL, todos os ranks desistem juntos e recebem o mesmo retorno.
+    size_t cap = SUM_OUTPUT_CAP(precision);
+    char *precise = rank == 0 ? malloc(cap) : NULL;
+
+    MPI_Barrier(MPI_COMM_WORLD); // todos começam juntos
+    double start = MPI_Wtime();
+    int rc = sum(precise, cap, precision, N);
+    double end = MPI_Wtime();
+
+    if (rc != 0) {
+        if (rank == 0) fprintf(stderr, "Falha ao calcular a soma de precisão arbitrária\n");
+        free(precise);
+        return 1;
     }
 
-    // Todos os ranks recebem o mesmo rc do rank 0, para que todos saiam juntos
-    MPI_Bcast(&rc, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    return rc;
+    if (rank == 0) {
+        printf("Soma de %lu números de Harmonica (precisa): %s\n", N, precise);
+        printf("Tempo total (precisa): %f\n", end - start);
+    }
+
+    free(precise);
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -184,22 +183,76 @@ static void sum_partial(long unsigned int *digits, const long unsigned int d,
     }
 }
 
-// Calcula H(n) com d casas decimais e grava em output (capacidade cap).
-// Retorna 0 em caso de sucesso, -1 se cap for insuficiente.
-// Pode ser chamada por qualquer rank: cada um soma só o seu bloco de i.
-// (Até a Fase 4 não há MPI_Reduce, então com mais de 1 rank o resultado é parcial.)
-int sum (char *output, const size_t cap, const long unsigned int d, const long unsigned int n) {
+/*
+    Propaga o carry, arredonda na casa d e formata digits como "I.ddd...d"
+    em output (capacidade cap). Sequencial: o carry depende da posição vizinha,
+    por isso só o rank 0 executa isto, depois do MPI_Reduce.
+ */
+static void sum_finalize(char *output, const size_t cap,
+                         long unsigned int *digits, const long unsigned int d) {
 
-    if (cap < SUM_OUTPUT_CAP(d)) return -1;
+    for (long unsigned int i = d + 11 - 1; i > 0; --i) {
+        digits[i - 1] += digits[i] / 10;
+        digits[i] %= 10;
+    }
+
+    if (digits[d + 1] >= 5) {
+        ++digits[d];
+    }
+
+    for (long unsigned int i = d; i > 0; --i) {
+        digits[i - 1] += digits[i] / 10;
+        digits[i] %= 10;
+    }
+
+    size_t pos = 0;
+    pos += (size_t) snprintf(output + pos, cap - pos, "%lu.", digits[0]);
+    for (long unsigned int i = 1; i <= d; ++i) {
+        output[pos++] = (char) ('0' + digits[i]); // cada digits[i] já está entre 0 e 9
+    }
+    output[pos] = '\0';
+}
+
+/*
+    Calcula H(n) com d casas decimais usando MPI + OpenMP.
+
+    COLETIVA: deve ser chamada por todos os ranks, com os mesmos d e n.
+     - Cada rank soma o seu bloco de i (OpenMP dentro do rank).
+     - MPI_Reduce(SUM) junta os vetores de dígitos no rank 0.
+     - O rank 0 faz carry, arredondamento e formatação em output (capacidade cap).
+    Só o rank 0 precisa passar output/cap válidos; nos demais, output = NULL.
+
+    Retorna 0 em sucesso, -1 em falha (o MESMO valor em todos os ranks).
+ */
+int sum (char *output, const size_t cap, const long unsigned int d, const long unsigned int n) {
 
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
+    // O MPI_Reduce usa int para a contagem: d + 11 precisa caber em int
+    const int fits_int = d + 11 <= (long unsigned int) INT_MAX;
+
     // Para d grande (evita estouro de pilha com VLA):
     // digits no heap com calloc, que já devolve a memória zerada
-    long unsigned int *digits = calloc(d + 11, sizeof(long unsigned int));
-    if (digits == NULL) return -1;
+    long unsigned int *digits = fits_int ? calloc(d + 11, sizeof(long unsigned int)) : NULL;
+
+    /*
+        Falhas locais (alocação, buffer do rank 0) viram decisão global, para
+        nenhum rank ficar esperando no MPI_Reduce de um rank que já parou.
+
+        MPI_Allreduce(&ok, &all_ok, 1, MPI_INT, MPI_MIN, ...): cada rank envia
+        o seu "ok" (1 = tudo certo, 0 = falhou) e todos recebem em all_ok o
+        mínimo entre os valores de todos os ranks. Basta um rank com ok = 0
+        para all_ok ser 0 em todos, e então todos desistem juntos.
+     */
+    int ok = digits != NULL && (rank != 0 || (output != NULL && cap >= SUM_OUTPUT_CAP(d)));
+    int all_ok;
+    MPI_Allreduce(&ok, &all_ok, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    if (!all_ok) {
+        free(digits);
+        return -1;
+    }
 
     // Bloco de i deste rank (vazio se n < size)
     long unsigned int i_begin, i_end;
@@ -207,26 +260,28 @@ int sum (char *output, const size_t cap, const long unsigned int d, const long u
 
     sum_partial(digits, d, i_begin, i_end);
 
-	for (long unsigned int i = d + 11 - 1; i > 0; --i) {
-		digits[i - 1] += digits[i] / 10;
-		digits[i] %= 10;
-	}
+    /*
+        Soma elemento a elemento dos vetores de todos os ranks, no rank 0:
+        digits[k] do rank 0 passa a ser digits[k] de todos os ranks somados.
+        Nenhuma posição estoura: cada uma soma no máximo n * 9.
 
-	if (digits[d + 1] >= 5) {
-		++digits[d];
-	}
+        MPI_Reduce(sendbuf, recvbuf, count, tipo, MPI_SUM, raiz, ...) lê count
+        elementos de sendbuf em cada rank e grava a soma em recvbuf, só na raiz.
 
-	for (long unsigned int i = d; i > 0; --i) {
-		digits[i - 1] += digits[i] / 10;
-		digits[i] %= 10;
-	}
-
-    size_t pos = 0;
-    pos += snprintf(output + pos, cap - pos, "%lu.", digits[0]);
-    for (long unsigned int i = 1; i <= d; ++i) {
-        output[pos++] = '0' + digits[i]; // cada digits[i] já está entre 0 e 9
+        MPI_IN_PLACE (só na raiz): normalmente a raiz tem um buffer de envio e
+        outro de recebimento. Com MPI_IN_PLACE no lugar do sendbuf, a raiz
+        diz "meu vetor de entrada já está em recvbuf (digits), e o resultado
+        sobrescreve ele mesmo". Isso evita alocar e copiar um segundo vetor de
+        d + 11 posições no rank 0, e passar o mesmo ponteiro nos dois
+        argumentos seria erro do MPI (buffers sobrepostos).
+     */
+    const int len = (int) (d + 11);
+    if (rank == 0) {
+        MPI_Reduce(MPI_IN_PLACE, digits, len, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        sum_finalize(output, cap, digits, d);
+    } else {
+        MPI_Reduce(digits, NULL, len, MPI_UNSIGNED_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     }
-    output[pos] = '\0';
 
     free(digits);
     return 0;
