@@ -26,11 +26,13 @@ static void usage(const char *prog) {
 }
 
 // Converte str em inteiro positivo; retorna 0 em caso de erro.
-static int parse_positive(const char *str, long long *out) {
+// Exige começar por dígito (strtoul aceitaria "-5" e espaços, com wraparound).
+static int parse_positive(const char *str, long unsigned int *out) {
     char *end;
+    if (*str < '0' || *str > '9') return 0;
     errno = 0;
-    long long v = strtoll(str, &end, 10);
-    if (errno != 0 || end == str || *end != '\0' || v <= 0) return 0;
+    long unsigned int v = strtoul(str, &end, 10);
+    if (errno != 0 || end == str || *end != '\0' || v == 0) return 0;
     *out = v;
     return 1;
 }
@@ -44,10 +46,10 @@ static int parse_positive(const char *str, long long *out) {
  *    1  --help foi pedido e impresso, o programa deve terminar com código 0
  *   -1  argumento inválido (mensagem já impressa), o programa deve terminar com código 1
  */
-static int parse_args(int argc, char *argv[], long long *n, int *threads,
-                      long long *precision, int *run_serial) {
+static int parse_args(int argc, char *argv[], long unsigned int *n, int *threads,
+                      long unsigned int *precision, int *run_serial) {
     for (int i = 1; i < argc; i++) {
-        long long v;
+        long unsigned int v;
         if (strncmp(argv[i], "--size=", 7) == 0) {
             if (!parse_positive(argv[i] + 7, &v)) {
                 fprintf(stderr, "Valor invalido para --size: '%s'\n", argv[i] + 7);
