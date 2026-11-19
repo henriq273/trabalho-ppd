@@ -1,1 +1,5 @@
+<<<<<<< HEAD
 --size=100000 --precision=20 --threads=2
+=======
+--size=10000000 --precision=10000 --no-serial
+>>>>>>> 5f8161b7d00f7996c14cc28adc20f881cf690311
