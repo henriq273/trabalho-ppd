@@ -21,23 +21,19 @@ Para compilar com o GCC e utilizar o PGO (Profile-Guided Optimization), basta ex
 O programa pode ser executado com os seguintes argumentos:
 
 - `--size=N`: define o tamanho do vetor a ser somado. O padrão é `100000`.
-- `--threads=T`: define o número de threads a ser utilizado. O padrão é o número de CPUs disponíveis.
-- `--no-serial`: desabilita a execução serial. O padrão é ativado.
+A quantidade de threads OpenMP por processo não é um argumento: vem da variável de ambiente `OMP_NUM_THREADS` (no cluster, o `job_mpi.sh` a define com o valor de `nproc`). Fora do cluster, ex.: `OMP_NUM_THREADS=4 ./harmonic-sum ...`.
 
-Por exemplo, para executar o programa com o tamanho de vetor `10000` e `4` threads, basta executar:
+Por exemplo, para executar o programa com o tamanho de vetor `10000` e `4` threads:
 
 ```bash
-./harmonic-sum --size=10000 --threads=4
+OMP_NUM_THREADS=4 ./harmonic-sum --size=10000
 ```
 
 ## Exemplo de uso
 
 ```bash
-$ ./harmonic-sum --size=10000 --threads=4
-Tamanho: 10000 | Threads: 4 | Serial: sim
-
-Soma de 10000 números de Harmonica: 0.9999999999999999
-Tempo serializado: 0.001000
+$ OMP_NUM_THREADS=4 ./harmonic-sum --size=10000
+Tamanho: 10000 | Threads: 4
 
 Soma de 10000 números de Harmonica: 0.9999999999999999
 Tempo total: 0.001000

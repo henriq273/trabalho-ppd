@@ -10,7 +10,7 @@
 #	- make pgo: compila com clang usando PGO (Profile-Guided Optimization):
 #	            instrumenta, executa para gerar o perfil e recompila com ele
 #	- make run: executa com mpirun (NP=processos, ARGS=argumentos do programa)
-#	            ex.: make run NP=4 ARGS="--size=100000 --threads=2"
+#	            ex.: make run NP=4 ARGS="--size=100000"
 #
 # Todos os alvos compilam e linkam com MPI (flags obtidos de "mpicc --showme").
 

@@ -4,20 +4,15 @@
 #include <time.h>
 #include <string.h>
 #include <errno.h>
-#include <float.h>
 #include <limits.h>
-#include <unistd.h>
 #include <omp.h>
 #include <mpi.h>
 
 #include "input.h"
 
 long unsigned int N = 100000;
-int num_threads = 1;
-int run_serial = 1;
 long unsigned int precision = 20; // casas decimais (d)
 
-long double harmonic_sum_serial(long unsigned int n);
 int sum(char *output, const size_t cap, const long unsigned int d, const long unsigned int n,
         double *t_compute, double *t_comm);
 
@@ -34,9 +29,8 @@ int sum(char *output, const size_t cap, const long unsigned int d, const long un
  */
 static int run(int argc, char *argv[], int rank, int size) {
 
-    // Padrao: quantidade de CPUs disponiveis (sobrescrito por --threads)
-    long ncpus = sysconf(_SC_NPROCESSORS_ONLN);
-    num_threads = ncpus > 0 ? (int) ncpus : 1;
+    // A quantidade de threads por rank vem de OMP_NUM_THREADS (definida no
+    // job_mpi.sh a partir do nproc); o código não a define.
 
     /*
         Parâmetros: só o rank 0 interpreta os argumentos (assim --help e as
@@ -44,44 +38,26 @@ static int run(int argc, char *argv[], int rank, int size) {
         status segue o contrato de parse_args (0 continua, 1 --help, -1 erro)
         e vai sozinho, como int, porque pode ser -1 (os demais são unsigned).
         É enviado primeiro para todos os ranks saírem juntos se for diferente de 0.
-        params = {N, threads, precision, run_serial}.
+        params = {N, precision}.
      */
     int status = 0;
-    long unsigned int params[4] = {0, 0, 0, 0};
+    long unsigned int params[2] = {0, 0};
     if (rank == 0) {
-        status = parse_args(argc, argv, &N, &num_threads, &precision, &run_serial);
+        status = parse_args(argc, argv, &N, &precision);
         params[0] = N;
-        params[1] = (long unsigned int) num_threads;
-        params[2] = precision;
-        params[3] = (long unsigned int) run_serial;
+        params[1] = precision;
     }
-    // MPI Broadcast: todos os ranks recebem o mesmo status e o mesmo params[4] do rank 0
+    // MPI Broadcast: todos os ranks recebem o mesmo status e o mesmo params[2] do rank 0
     MPI_Bcast(&status, 1, MPI_INT, 0, MPI_COMM_WORLD);
     if (status != 0) return status > 0 ? 0 : 1; // todos saem juntos
 
-    MPI_Bcast(params, 4, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+    MPI_Bcast(params, 2, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
     N           = params[0];
-    num_threads = (int) params[1];
-    precision   = params[2];
-    run_serial  = (int) params[3];
+    precision   = params[1];
 
     if (rank == 0) {
-        printf("Tamanho: %lu | Processos: %d | Threads: %d | Precisao: %lu | Serial: %s\n\n",
-               N, size, num_threads, precision, run_serial ? "sim" : "nao");
-
-        if (run_serial) {
-            double start = MPI_Wtime();
-            long double result = harmonic_sum_serial(N);
-            double end = MPI_Wtime();
-
-            // O long double só tem LDBL_DIG dígitos decimais confiáveis; imprimir
-            // mais que isso só mostra ruído e zeros. Limita às casas que existem.
-            const int serial_digits = precision < (long unsigned int) LDBL_DIG
-                                    ? (int) precision : LDBL_DIG;
-            printf("Soma de %lu números de Harmonica:\n   %.*Lf\n", N, serial_digits, result);
-            printf("Tempo serializado: %f\n\n", end - start);
-            fflush(stdout);
-        }
+        printf("Tamanho: %lu | Processos: %d | Threads: %d | Precisao: %lu\n\n",
+               N, size, omp_get_max_threads(), precision);
     }
 
     // Soma de precisão arbitrária (divisão longa dígito a dígito).
@@ -189,7 +165,7 @@ static void block_range(const long unsigned int n, const int rank, const int siz
 static void sum_partial(long unsigned int *digits, const long unsigned int d,
                         const long unsigned int i_begin, const long unsigned int i_end) {
 
-    #pragma omp parallel for num_threads(num_threads) reduction(+:digits[:d + 11]) schedule(guided)
+    #pragma omp parallel for reduction(+:digits[:d + 11]) schedule(guided)
     for (long unsigned int i = i_begin; i <= i_end; ++i) {
         long unsigned int remainder = 1;
         for (long unsigned int digit = 0; digit < d + 11 && remainder; ++digit) {
@@ -324,17 +300,4 @@ int sum (char *output, const size_t cap, const long unsigned int d, const long u
 
     free(digits);
     return 0;
-}
-
-
-
-// Referência serial em long double (mantissa de 64 bits no x86, ~19 dígitos
-// corretos), em vez de double (~15-16). Mesmo assim, para --precision acima
-// de ~19 casas, os dígitos extras impressos desta linha não são significativos.
-long double harmonic_sum_serial(long unsigned int n) {
-    long double serial_sum = 0.0L;
-    for (long unsigned int i = 1; i <= n; i++) {
-        serial_sum += 1.0L / i;
-    }
-    return serial_sum;
 }
