@@ -16,13 +16,10 @@
 
         --precision=D: define o número de casas decimais (padrão: 20)
         Uso: ./harmonic-sum --precision=50
-
-        --no-serial: desabilita a execução serial
-        Uso: ./harmonic-sum --no-serial
 */
 
 static void usage(const char *prog) {
-    fprintf(stderr, "Uso: %s [--size=N] [--threads=T] [--precision=D] [--no-serial]\n", prog);
+    fprintf(stderr, "Uso: %s [--size=N] [--threads=T] [--precision=D]\n", prog);
 }
 
 // Converte str em inteiro positivo; retorna 0 em caso de erro.
@@ -45,7 +42,7 @@ static int parse_positive(const char *str, long long *out) {
  *   -1  argumento inválido (mensagem já impressa), o programa deve terminar com código 1
  */
 static int parse_args(int argc, char *argv[], long long *n, int *threads,
-                      long long *precision, int *run_serial) {
+                      long long *precision) {
     for (int i = 1; i < argc; i++) {
         long long v;
         if (strncmp(argv[i], "--size=", 7) == 0) {
@@ -66,8 +63,6 @@ static int parse_args(int argc, char *argv[], long long *n, int *threads,
                 return -1;
             }
             *precision = v;
-        } else if (strcmp(argv[i], "--no-serial") == 0) {
-            *run_serial = 0;
         } else if (strcmp(argv[i], "--help") == 0) {
             usage(argv[0]);
             printf("Argumentos:\n"
@@ -76,9 +71,7 @@ static int parse_args(int argc, char *argv[], long long *n, int *threads,
                    "  --threads=T: define o número de threads a ser utilizado\n"
                    "    Uso: ./harmonic-sum --threads=4\n\n"
                    "  --precision=D: define o número de casas decimais (padrão: 20)\n"
-                   "    Uso: ./harmonic-sum --precision=50\n\n"
-                   "  --no-serial: desabilita a comparação com a execução serial\n"
-                   "    Uso: ./harmonic-sum --no-serial\n");
+                   "    Uso: ./harmonic-sum --precision=50\n");
             return 1;
         } else {
             fprintf(stderr, "Argumento desconhecido: '%s'\n"

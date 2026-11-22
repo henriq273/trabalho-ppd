@@ -13,11 +13,9 @@
 
 long long int N = 100000;
 int num_threads = 1;
-int run_serial = 1;
 long long int precision = 20; // casas decimais (d)
 
 double get_time();
-double harmonic_sum_serial(long long int n);
 int sum(char *output, const size_t cap, const long unsigned int d, const long unsigned int n);
 
 // Espaço mínimo do buffer de saída para d casas decimais:
@@ -32,20 +30,10 @@ int main(int argc, char *argv[]) {
     long ncpus = sysconf(_SC_NPROCESSORS_ONLN);
     num_threads = ncpus > 0 ? (int) ncpus : 1;
 
-    int status = parse_args(argc, argv, &N, &num_threads, &precision, &run_serial);
+    int status = parse_args(argc, argv, &N, &num_threads, &precision);
     if (status != 0) return status > 0 ? 0 : 1;
 
-    printf("Tamanho: %lld | Threads: %d | Precisao: %lld | Serial: %s\n\n", N, num_threads, precision, run_serial ? "sim" : "nao");
-
-    if (run_serial) {
-        double start = get_time();
-        long double result = harmonic_sum_serial(N);
-        double end = get_time();
-
-        printf("Soma de %lld números de Harmonica: %.*Lf\n", N, (int) precision, result);
-        printf("Tempo serializado: %f\n\n", end - start);
-        fflush(stdout);
-    }
+    printf("Tamanho: %lld | Threads: %d | Precisao: %lld\n\n", N, num_threads, precision);
 
     // Soma de precisão arbitrária (divisão longa dígito a dígito)
     size_t cap = SUM_OUTPUT_CAP(precision);
@@ -134,12 +122,4 @@ double get_time() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (double) tv.tv_sec + (double) tv.tv_usec * 1e-6;
-}
-
-double harmonic_sum_serial(long long int n) {
-    double serial_sum = 0.0;
-    for (long long int i = 1; i <= n; i++) {
-        serial_sum += 1.0 / i;
-    }
-    return serial_sum;
 }
