@@ -165,7 +165,7 @@ static void block_range(const long unsigned int n, const int rank, const int siz
 static void sum_partial(long unsigned int *digits, const long unsigned int d,
                         const long unsigned int i_begin, const long unsigned int i_end) {
 
-    #pragma omp parallel for reduction(+:digits[:d + 11]) schedule(guided)
+    #pragma omp parallel for reduction(+:digits[:d + 11]) schedule(static)
     for (long unsigned int i = i_begin; i <= i_end; ++i) {
         long unsigned int remainder = 1;
         for (long unsigned int digit = 0; digit < d + 11 && remainder; ++digit) {
