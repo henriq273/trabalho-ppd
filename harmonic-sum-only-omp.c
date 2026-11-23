@@ -33,7 +33,7 @@ int main(int argc, char *argv[]) {
     int status = parse_args(argc, argv, &N, &num_threads, &precision);
     if (status != 0) return status > 0 ? 0 : 1;
 
-    printf("Tamanho: %lld | Threads: %d | Precisao: %lld\n\n", N, num_threads, precision);
+    printf("Tamanho: %lld | Threads: %d | Precisao: %lld | Versão somente OpenMP\n\n", N, num_threads, precision);
 
     // Soma de precisão arbitrária (divisão longa dígito a dígito)
     size_t cap = SUM_OUTPUT_CAP(precision);
