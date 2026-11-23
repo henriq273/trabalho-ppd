@@ -32,7 +32,7 @@
 ##SBATCH --mail-user=SEU_EMAIL@estudante.ufscar.br
 
 # ============================ CONFIGURE AQUI ============================
-FONTE=harmonic-sum.c         # seu codigo-fonte
+FONTE=harmonic-sum-only-omp.c         # seu codigo-fonte
 ARGUMENTOS="1000"        # argumentos de linha de comando (pode ficar "")
 ENTRADA_STDIN=""         # so se o programa le com scanf/stdin (./prog < arquivo):
                          # coloque o nome do arquivo aqui. Se o programa abre o
