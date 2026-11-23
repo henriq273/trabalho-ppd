@@ -80,7 +80,6 @@ int sum (char *output, const size_t cap, const long unsigned int d, const long u
      * precisa aumentar OMP_STACKSIZE (ex.: export OMP_STACKSIZE=64M).
     */
 
-    #pragma omp parallel for num_threads(num_threads) reduction(+:digits[:d + 11]) schedule(guided)
 	for (long unsigned int i = 1; i <= n; ++i) {
 		long unsigned int remainder = 1;
 		for (long unsigned int digit = 0; digit < d + 11 && remainder; ++digit) {
