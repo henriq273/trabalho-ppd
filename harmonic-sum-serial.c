@@ -11,9 +11,9 @@
 
 #include "input.h"
 
-long long int N = 100000;
+long unsigned int N = 100000;
 int num_threads = 1;
-long long int precision = 20; // casas decimais (d)
+long unsigned int precision = 20; // casas decimais (d)
 
 double get_time();
 int sum(char *output, const size_t cap, const long unsigned int d, const long unsigned int n);
