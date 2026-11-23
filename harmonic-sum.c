@@ -56,7 +56,7 @@ static int run(int argc, char *argv[], int rank, int size) {
     precision   = params[1];
 
     if (rank == 0) {
-        printf("Tamanho: %lu | Processos: %d | Threads: %d | Precisao: %lu\n\n",
+        printf("Tamanho: %lu | Processos: %d | Threads: %d | Precisao: %lu | Versão MPI + OpenMP\n\n",
                N, size, omp_get_max_threads(), precision);
     }
 
