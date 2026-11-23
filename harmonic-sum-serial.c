@@ -12,7 +12,6 @@
 #include "input.h"
 
 long unsigned int N = 100000;
-int num_threads = 1;
 long unsigned int precision = 20; // casas decimais (d)
 
 double get_time();
@@ -26,14 +25,10 @@ int sum(char *output, const size_t cap, const long unsigned int d, const long un
 
 int main(int argc, char *argv[]) {
 
-    // Padrao: quantidade de CPUs disponiveis (sobrescrito por --threads)
-    long ncpus = sysconf(_SC_NPROCESSORS_ONLN);
-    num_threads = ncpus > 0 ? (int) ncpus : 1;
-
-    int status = parse_args(argc, argv, &N, &num_threads, &precision);
+    int status = parse_args(argc, argv, &N, &precision);
     if (status != 0) return status > 0 ? 0 : 1;
 
-    printf("Tamanho: %lld | Threads: %d | Precisao: %lld | Versão somente OpenMP\n\n", N, num_threads, precision);
+    printf("Tamanho: %lld | Precisao: %lld | Versão serial\n\n", N, precision);
 
     // Soma de precisão arbitrária (divisão longa dígito a dígito)
     size_t cap = SUM_OUTPUT_CAP(precision);
@@ -74,10 +69,6 @@ int sum (char *output, const size_t cap, const long unsigned int d, const long u
     /*
      * Para d grande (evita estouro de pilha com VLA):
      * alocar digits no heap com calloc, que já devolve a memória zerada
-     * 
-     * Obs.: as cópias privadas criadas pelo reduction(+:digits[:d + 11]) ficam
-     * na pilha de cada thread, mesmo com digits no heap. Se ainda estourar,
-     * precisa aumentar OMP_STACKSIZE (ex.: export OMP_STACKSIZE=64M).
     */
 
 	for (long unsigned int i = 1; i <= n; ++i) {

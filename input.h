@@ -11,15 +11,12 @@
         --size=N: define o tamanho do vetor a ser somado
         Uso: ./harmonic-sum --size=1000
 
-        --threads=T: define o número de threads a ser utilizado
-        Uso: ./harmonic-sum --threads=4
-
         --precision=D: define o número de casas decimais (padrão: 20)
         Uso: ./harmonic-sum --precision=50
 */
 
 static void usage(const char *prog) {
-    fprintf(stderr, "Uso: %s [--size=N] [--threads=T] [--precision=D]\n", prog);
+    fprintf(stderr, "Uso: %s [--size=N] [--precision=D]\n", prog);
 }
 
 // Converte str em inteiro positivo; retorna 0 em caso de erro.
@@ -41,7 +38,7 @@ static int parse_positive(const char *str, long unsigned int *out) {
  *    1  --help foi pedido e impresso, o programa deve terminar com código 0
  *   -1  argumento inválido (mensagem já impressa), o programa deve terminar com código 1
  */
-static int parse_args(int argc, char *argv[], long unsigned int *n, int *threads,
+static int parse_args(int argc, char *argv[], long unsigned int *n,
                       long unsigned int *precision) {
     for (int i = 1; i < argc; i++) {
         long unsigned int v;
@@ -51,12 +48,6 @@ static int parse_args(int argc, char *argv[], long unsigned int *n, int *threads
                 return -1;
             }
             *n = v;
-        } else if (strncmp(argv[i], "--threads=", 10) == 0) {
-            if (!parse_positive(argv[i] + 10, &v) || v > 65536) {
-                fprintf(stderr, "Valor invalido para --threads: '%s'\n", argv[i] + 10);
-                return -1;
-            }
-            *threads = (int) v;
         } else if (strncmp(argv[i], "--precision=", 12) == 0) {
             if (!parse_positive(argv[i] + 12, &v) || v > 100000) {
                 fprintf(stderr, "Valor invalido para --precision: '%s'\n", argv[i] + 12);
@@ -68,8 +59,6 @@ static int parse_args(int argc, char *argv[], long unsigned int *n, int *threads
             printf("Argumentos:\n"
                    "  --size=N: define o tamanho do vetor a ser somado\n"
                    "    Uso: ./harmonic-sum --size=1000\n\n"
-                   "  --threads=T: define o número de threads a ser utilizado\n"
-                   "    Uso: ./harmonic-sum --threads=4\n\n"
                    "  --precision=D: define o número de casas decimais (padrão: 20)\n"
                    "    Uso: ./harmonic-sum --precision=50\n");
             return 1;
